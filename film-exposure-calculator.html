@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Film Photography Exposure Calculator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.min.js"></script>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    
+    .app-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    h1 {
+      text-align: center;
+      color: #2c3e50;
+      margin-top: 0;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 15px;
+    }
+    
+    .settings-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    
+    @media (max-width: 600px) {
+      .settings-container {
+        grid-template-columns: 1fr;
+      }
+    }
+    
+    .setting-group {
+      margin-bottom: 20px;
+    }
+    
+    .setting-group h2 {
+      margin-top: 0;
+      font-size: 1.2rem;
+      color: #2c3e50;
+    }
+    
+    select, input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 1rem;
+    }
+    
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 6px;
+      text-align: center;
+      font-weight: bold;
+      font-size: 1.2rem;
+    }
+    
+    .good {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    
+    .underexposed {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    
+    .overexposed {
+      background-color: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeeba;
+    }
+    
+    .camera-display {
+      background: #2c3e50;
+      color: white;
+      border-radius: 6px;
+      padding: 15px;
+      margin-top: 20px;
+      font-family: monospace;
+      display: flex;
+      justify-content: space-between;
+    }
+    
+    .exposure-value {
+      font-size: 1.8rem;
+      font-weight: bold;
+      text-align: center;
+      margin: 15px 0;
+    }
+    
+    .parameter-label {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 3px;
+    }
+    
+    .slider-container {
+      margin: 15px 0;
+    }
+    
+    .slider-value {
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    
+    .scene-selection {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    
+    .scene-button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      background: #e2e2e2;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .scene-button.active {
+      background: #3498db;
+      color: white;
+    }
+    
+    .scene-button:hover {
+      background: #3498db;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="app-container">
+    <h1>Film Photography Exposure Calculator</h1>
+    
+    <div class="scene-selection">
+      <button v-for="(value, key) in scenes" 
+              :key="key" 
+              @click="selectScene(key)"
+              class="scene-button"
+              :class="{ active: selectedScene === key }">
+        {{ key }} (EV{{ value }})
+      </button>
+    </div>
+    
+    <div class="exposure-value">
+      EV{{ calculatedEV.toFixed(1) }}
+    </div>
+    
+    <div class="settings-container">
+      <div class="left-settings">
+        <div class="setting-group">
+          <h2>Film ISO</h2>
+          <select v-model="isoValue">
+            <option v-for="option in isoOptions" :value="option">ISO {{ option }}</option>
+          </select>
+        </div>
+        
+        <div class="setting-group">
+          <h2>Aperture</h2>
+          <select v-model="apertureValue">
+            <option v-for="option in apertureOptions" :value="option">f/{{ option }}</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="right-settings">
+        <div class="setting-group">
+          <h2>Shutter Speed</h2>
+          <select v-model="shutterValue">
+            <option v-for="option in shutterOptions" :value="option">{{ formatShutter(option) }}</option>
+          </select>
+        </div>
+        
+        <div class="setting-group">
+          <h2>ND Filter</h2>
+          <select v-model="ndValue">
+            <option v-for="option in ndOptions" :value="option.value">{{ option.label }}</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    
+    <div class="camera-display">
+      <div>ISO {{ isoValue }}</div>
+      <div>f/{{ apertureValue }}</div>
+      <div>{{ formatShutter(shutterValue) }}</div>
+      <div v-if="ndValue > 0">ND{{ ndValue }}</div>
+    </div>
+    
+    <div class="result" :class="exposureStatus.class">
+      {{ exposureStatus.message }}
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, computed, watch } = Vue;
+    
+    createApp({
+      setup() {
+        // Light scene EV values (at ISO 100)
+        const scenes = {
+          "Sunny Daylight": 15,
+          "Cloudy": 13,
+          "Golden Hour": 12,
+          "Overcast": 11,
+          "Sunset/Sunrise": 10,
+          "Deep Shade": 9,
+          "Indoors (Bright)": 8,
+          "Indoors (Normal)": 6,
+          "Indoors (Dim)": 4,
+          "Night (City)": 3,
+          "Night (Dark)": 0
+        };
+        
+        const selectedScene = ref("Sunny Daylight");
+        const sceneEV = computed(() => scenes[selectedScene.value]);
+        
+        // Camera settings
+        const isoOptions = [25, 50, 100, 200, 400, 800, 1600, 3200];
+        const isoValue = ref(400);
+        
+        const apertureOptions = [1.0, 1.1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.5, 2.8, 3.2, 3.5, 4, 4.5, 5, 5.6, 6.3, 7.1, 8, 9, 10, 11, 13, 14, 16, 18, 20, 22, 25, 28, 32];
+        const apertureValue = ref(5.6);
+        
+        const shutterOptions = [
+          1/8000, 1/4000, 1/2000, 1/1000, 1/500, 1/250, 1/125, 1/60, 1/30, 1/15, 1/8, 1/4, 1/2, 1, 2, 4, 8, 15, 30, 60
+        ];
+        const shutterValue = ref(1/125);
+        
+        const ndOptions = [
+          { value: 0, label: "None", stops: 0 },
+          { value: 2, label: "ND2 (1 stop)", stops: 1 },
+          { value: 4, label: "ND4 (2 stops)", stops: 2 },
+          { value: 8, label: "ND8 (3 stops)", stops: 3 },
+          { value: 16, label: "ND16 (4 stops)", stops: 4 },
+          { value: 32, label: "ND32 (5 stops)", stops: 5 },
+          { value: 64, label: "ND64 (6 stops)", stops: 6 },
+          { value: 1000, label: "ND1000 (10 stops)", stops: 10 }
+        ];
+        const ndValue = ref(0);
+        
+        // Calculate the current EV based on all settings
+        const calculatedEV = computed(() => {
+          // The formula for EV at ISO 100: EV = log2(N²/t)
+          // where N is aperture, t is time in seconds
+          const apertureSquared = Math.pow(apertureValue.value, 2);
+          const baseEV = Math.log2(apertureSquared / shutterValue.value);
+          
+          // Adjust for ISO (every doubling/halving of ISO changes EV by +/-1)
+          // Higher ISO means you need less light, so subtract from EV
+          const isoAdjustment = Math.log2(isoValue.value / 100);
+          
+          // Adjust for ND filter (add stops)
+          // ND filter blocks light, so add to EV (you need more light)
+          const ndFilter = ndOptions.find(option => option.value === parseInt(ndValue.value));
+          const ndAdjustment = ndFilter ? ndFilter.stops : 0;
+          
+          return baseEV - isoAdjustment + ndAdjustment;
+        });
+        
+        // Determine if the exposure is correct
+        const exposureStatus = computed(() => {
+          const difference = calculatedEV.value - sceneEV.value;
+          
+          if (Math.abs(difference) <= 0.5) {
+            return {
+              message: "Good Exposure! ✓",
+              class: "good"
+            };
+          } else if (difference > 0.5) {
+            const stops = difference.toFixed(1);
+            return {
+              message: `Underexposed by ${stops} stops`,
+              class: "underexposed"
+            };
+          } else {
+            const stops = Math.abs(difference).toFixed(1);
+            return {
+              message: `Overexposed by ${stops} stops`,
+              class: "overexposed"
+            };
+          }
+        });
+        
+        // Helper function to format shutter speeds
+        const formatShutter = (value) => {
+          if (value >= 1) {
+            return `${value}s`;
+          } else {
+            return `1/${Math.round(1/value)}s`;
+          }
+        };
+        
+        // Select scene and update
+        const selectScene = (scene) => {
+          selectedScene.value = scene;
+        };
+        
+        // Return all necessary data and functions
+        return {
+          scenes,
+          selectedScene,
+          sceneEV,
+          isoOptions,
+          isoValue,
+          apertureOptions,
+          apertureValue,
+          shutterOptions,
+          shutterValue,
+          ndOptions,
+          ndValue,
+          calculatedEV,
+          exposureStatus,
+          formatShutter,
+          selectScene
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
