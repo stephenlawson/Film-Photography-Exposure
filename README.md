@@ -4,7 +4,7 @@
 
 A simple yet powerful web application for film photographers to calculate proper exposure settings in different lighting conditions. Built with Vue.js and pure HTML/CSS.
 
-**[Try the Live Demo]()**
+**[Try the Live Demo](https://stephenlawson.github.io/Film-Photography-Exposure/)**
 
 ## Features
 
